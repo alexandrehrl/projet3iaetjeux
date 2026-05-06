@@ -267,7 +267,7 @@ class StabilityChecker:
     - i préfère j à son affectation courante
     - j préfère i à l'un de ses étudiants actuels (ou j a une place libre)
 
-    Complexité : O(n × m × cap_max)
+    Complexité : O(n × m) grâce au pré-calcul du pire rang par parcours.
     """
 
     def __init__(self, CE, CP, capacities, rank_etu, rank_spe):
@@ -281,35 +281,34 @@ class StabilityChecker:
 
     def find_unstable_pairs(self, assignment):
         """Retourne la liste des paires (i, j) instables."""
-        # Construire le tableau d'affectation inverse
         current_spe = {}
         for j, students in assignment.items():
             for i in students:
                 current_spe[i] = j
 
+        # Pré-calculer le rang du pire étudiant de chaque parcours en O(n) au total
+        # (évite de recalculer max(...) O(cap) fois pour le même j dans la boucle)
+        worst_rank_in = {
+            j: max(self.rank_spe[j][w] for w in students) if students else -1
+            for j, students in assignment.items()
+        }
+
         unstable = []
         for i in range(self.n):
-            j_i = current_spe.get(i)     # parcours actuel de i (None si non affecté)
+            j_i = current_spe.get(i)
             for j in range(self.m):
                 if j_i == j:
-                    continue             # i est déjà dans j
-
-                # i préfère-t-il j à son affectation actuelle ?
+                    continue
                 if j_i is None:
-                    i_prefers_j = True   # non affecté préfère n'importe quoi
+                    i_prefers_j = True
                 else:
                     i_prefers_j = self.rank_etu[i][j] < self.rank_etu[i][j_i]
-
                 if not i_prefers_j:
                     continue
-
-                # j préfère-t-il i à l'un de ses étudiants (ou a-t-il de la place) ?
                 if len(assignment[j]) < self.capacities[j]:
                     unstable.append((i, j))
-                elif assignment[j]:
-                    worst_rank_in_j = max(self.rank_spe[j][w] for w in assignment[j])
-                    if self.rank_spe[j][i] < worst_rank_in_j:
-                        unstable.append((i, j))
+                elif self.rank_spe[j][i] < worst_rank_in[j]:
+                    unstable.append((i, j))
 
         return unstable
 
