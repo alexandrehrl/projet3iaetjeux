@@ -692,7 +692,7 @@ def main():
     # ------------------------------------------------------------------
     # Q7-Q10 : Performance
     # ------------------------------------------------------------------
-    print_section("Q8-Q10 : Mesure des performances")
+    print_section("Q7-Q10 : Génération aléatoire et mesure des performances")
 
     n_values = list(range(200, 2001, 200))
     measurer = PerformanceMeasurer(m=data.m)

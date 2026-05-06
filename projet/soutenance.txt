@@ -1,0 +1,466 @@
+================================================================================
+  LU3IN025 – SOUTENANCE ORALE : Script de présentation
+  TMEs 1 à 3 – Gale-Shapley & PLNE – Affectation dans le Master Informatique
+================================================================================
+
+CONSIGNES D'UTILISATION
+------------------------
+Ce script suit l'ordre des questions du TME. Chaque bloc indique :
+  - ce qu'on dit à l'oral
+  - les lignes du fichier projet.py à montrer si demandé
+  - les points techniques à ne pas oublier
+
+Durée cible : 15–20 minutes de présentation + questions.
+
+================================================================================
+  INTRODUCTION (30 sec)
+================================================================================
+
+"Notre projet résout le problème d'affectation d'étudiants dans les 10 parcours
+du Master Informatique de Sorbonne Université, via deux approches :
+l'algorithme de Gale-Shapley (côté étudiants et côté parcours) pour garantir
+la stabilité, et la Programmation Linéaire en Nombres Entiers (PLNE) avec
+Gurobi pour optimiser l'équité.
+
+Tout le code est dans un seul fichier `projet.py`, structuré en 7 classes.
+Le point d'entrée est la fonction `main()` qui exécute toutes les questions
+dans l'ordre."
+
+================================================================================
+  Q1 – LECTURE DES FICHIERS (lignes 44–91)
+================================================================================
+
+DIRE :
+"La classe `PreferenceData` (ligne 21) gère la lecture et le stockage.
+Deux méthodes :
+
+  - `read_student_prefs` (l.44) lit PrefEtu.txt.
+    La première ligne donne n (ici 13). Chaque ligne suivante : numéro,
+    nom, puis la liste des m=10 parcours dans l'ordre de préférence de
+    l'étudiant. On stocke uniquement les IDs de parcours dans CE[i].
+
+  - `read_spe_prefs` (l.57) lit PrefSpe.txt.
+    Ligne 0 : NbEtu (vérification de cohérence).
+    Ligne 1 : Cap → capacités des 10 parcours [2,1,1,1,2,1,1,1,1,2].
+    La somme des capacités = 13 = n, donc tous les étudiants seront affectés.
+    CP[j] = liste des étudiants ordonnés par préférence du parcours j.
+
+  - `build_rank_matrices` (l.75) pré-calcule deux matrices inverses :
+    rank_etu[i][j] = rang du parcours j dans la liste de l'étudiant i (0=meilleur)
+    rank_spe[j][i] = rang de l'étudiant i dans la liste du parcours j (0=meilleur)
+    Ces matrices permettent des comparaisons de préférences en O(1)."
+
+POINT CLÉ À MENTIONNER :
+"Sans ces matrices inversées, chaque comparaison 'qui préfère qui ?' nécessiterait
+de chercher dans une liste en O(m) ou O(n). Avec elles, c'est O(1).
+Ce précalcul en O(n×m) est amortit sur toutes les itérations de GS."
+
+================================================================================
+  Q2 – STRUCTURES DE DONNÉES POUR GS CÔTÉ ÉTUDIANTS (lignes 113–134)
+================================================================================
+
+DIRE :
+"La question 2 demande d'identifier les 5 opérations critiques et de choisir
+les structures optimales. Voici nos choix, documentés dans le docstring de
+`GaleShapleyStudentSide` (ligne 113) :
+
+  1. TROUVER UN ÉTUDIANT LIBRE
+     → `free_students` : deque (file double-ended)
+     O(1) pour popleft() et append() aux deux extrémités.
+     Une liste Python aurait O(n) pour pop(0).
+
+  2. PROCHAIN PARCOURS À PROPOSER
+     → `next_proposal[i]` : liste d'entiers (l.147)
+     Chaque étudiant mémorise l'indice de sa prochaine proposition dans CE[i].
+     O(1) pour lire et incrémenter. Aucun recalcul.
+
+  3. POSITION DE L'ÉTUDIANT i DANS LE CLASSEMENT DU PARCOURS j
+     → `rank_spe[j][i]` : tableau 2D précalculé (pré-Q2)
+     O(1) — c'est l'apport majeur des matrices inversées.
+
+  4. PIRE ÉTUDIANT DU PARCOURS j PARMI SES AFFECTÉS ACTUELS
+     → `worst_heap[j]` : max-heap implémenté avec heapq en négant le rang
+     On stocke (-rank_spe[j][i], i). Le minimum du tas Python correspond
+     à l'étudiant le moins préféré (rang le plus élevé).
+     O(log cap_j) pour trouver et extraire le pire.
+
+  5. REMPLACER UN ÉTUDIANT PAR UN AUTRE
+     → heapreplace + set.add/remove (l.176–179)
+     heapreplace : O(log cap_j)
+     assignment[j] est un set : add/remove en O(1) amorti."
+
+POINT CLÉ SUR LA MÉMOIRE :
+"Occupation mémoire : O(n×m) pour les matrices de rang, O(n) pour les
+structures auxiliaires par parcours."
+
+================================================================================
+  Q3 – ALGORITHME GS CÔTÉ ÉTUDIANTS + COMPLEXITÉ (lignes 137–184)
+================================================================================
+
+DIRE :
+"La méthode `run()` (l.137) suit exactement le pseudo-code standard de GS
+adapté au problème des hôpitaux :
+
+  → Tant qu'il existe un étudiant libre i dans la deque :
+      - j = CE[i][next_proposal[i]++]  ← prochain parcours à proposer
+      - Si j a de la place → on affecte i (heappush dans worst_heap[j])
+      - Sinon → on compare i avec le pire étudiant w de j :
+          · Si rank_spe[j][i] < rank_spe[j][w] : i est meilleur que w
+            → heapreplace + set.remove(w)/add(i) + w redevient libre
+          · Sinon : i reste libre et proposera au parcours suivant
+
+TERMINAISON : chaque étudiant peut proposer à au plus m parcours.
+COMPLEXITÉ : au plus n×m propositions, chacune coûtant O(log cap_max).
+→ O(n × m × log(cap_max))
+Avec capacités équilibrées (cap ≈ n/m) : O(n × m × log(n/m))
+
+Sur l'instance réelle : seulement 28 propositions (pire cas = 13×10 = 130)."
+
+================================================================================
+  Q4 – ALGORITHME GS CÔTÉ PARCOURS + STRUCTURES (lignes 191–254)
+================================================================================
+
+DIRE :
+"Dans la version 'côté parcours', ce sont les parcours qui font des propositions
+aux étudiants. La symétrie est un peu différente car un parcours peut accepter
+plusieurs étudiants (capacity > 1).
+
+  Structures utilisées (docstring l.191) :
+  - `active` (set) : parcours qui ont de la place et des candidats restants — O(1)
+  - `next_proposal[j]` : indice du prochain étudiant à contacter — O(1)
+  - `rank_etu[i][j]` : préférence de i pour j — O(1) (précalculé)
+  - `current_spe[i]` : parcours actuel de l'étudiant i, None si libre — O(1)
+  - `assignment[j]` : set des étudiants affectés à j — O(1)
+
+  Algorithme (run(), l.213) :
+  → Tant qu'il existe un parcours actif j :
+      - active.discard(j)
+      - Tant que j est sous-rempli et a des candidats :
+          i = CP[j][next_proposal[j]++]
+          · Si i est libre → affecter i à j
+          · Sinon i est dans j' :
+              Si rank_etu[i][j] < rank_etu[i][j'] (i préfère j à j') :
+                → déplacer i vers j, réactiver j' si sous-rempli
+              Sinon : j continue au candidat suivant
+
+COMPLEXITÉ : O(n × m) — chaque parcours propose à au plus n étudiants,
+chaque proposition est O(1). Pas besoin de heap ici car les parcours
+décident selon la préférence de l'étudiant (pas la leur)."
+
+POINT DIFFÉRENCIATION Q2/Q4 :
+"Côté étudiants : le parcours compare parmi ses affectés actuels → besoin du heap.
+Côté parcours : l'étudiant compare deux parcours → O(1) avec rank_etu."
+
+================================================================================
+  Q5 – RÉSULTATS SUR LES FICHIERS DE TEST (ligne 651–667, rapport section Q5)
+================================================================================
+
+DIRE :
+"Sur notre instance (13 étudiants, 10 parcours), les deux algorithmes donnent
+la même affectation unique :
+
+  AI2D (cap 2) : Etu5, Etu12
+  BIM  (cap 1) : Etu4
+  CCA  (cap 1) : Etu9
+  IMA  (cap 1) : Etu8
+  MIND (cap 2) : Etu10, Etu11
+  QI   (cap 1) : Etu0
+  RES  (cap 1) : Etu1
+  SAR  (cap 1) : Etu7
+  SESI (cap 1) : Etu6
+  STL  (cap 2) : Etu2, Etu3
+
+GS côté étudiants : 28 propositions.
+GS côté parcours : 57 propositions.
+L'unicité de la solution stable s'explique par la structure particulière de
+cette instance."
+
+SI QUESTION SUR L'OPTIMALITÉ :
+"GS côté étudiants produit l'affectation stable optimale pour les étudiants
+(student-optimal) : il n'existe pas d'autre affectation stable où tous les
+étudiants seraient au moins aussi bien ou mieux.
+GS côté parcours produit l'affectation stable optimale pour les parcours.
+Ici elles coïncident — ce n'est pas toujours le cas."
+
+================================================================================
+  Q6 – VÉRIFICATEUR DE STABILITÉ (lignes 261–313)
+================================================================================
+
+DIRE :
+"La classe `StabilityChecker` et sa méthode `find_unstable_pairs` (l.282)
+vérifient la stabilité en O(n×m).
+
+Une paire (étudiant i, parcours j) est instable si :
+  1. i n'est pas affecté à j
+  2. i préfère j à son affectation actuelle
+  3. j préfère i à l'un de ses étudiants actuels (ou j a une place libre)
+
+Implémentation efficace en deux passes :
+  1. Construire current_spe[i] en O(n) — affectation inverse
+  2. Pré-calculer worst_rank_in[j] = rang max parmi les affectés de j,
+     en O(n) au total. Cela évite un max() à O(cap) à chaque test de paire.
+  3. Tester toutes les n×m paires en O(1) chacune.
+
+Résultats :
+  → GS côté étudiants : 0 paire instable ✓
+  → GS côté parcours  : 0 paire instable ✓"
+
+================================================================================
+  Q7 – GÉNÉRATION D'INSTANCES ALÉATOIRES (lignes 320–369)
+================================================================================
+
+DIRE :
+"La classe `RandomGenerator` (l.320) contient des méthodes statiques :
+
+  - `generate_CE(n, m)` : pour chaque étudiant, on génère une permutation
+    aléatoire de [0, m-1] via random.shuffle. O(n×m).
+
+  - `generate_CP(n, m)` : idem pour les parcours sur les étudiants. O(n×m).
+
+  - `generate_balanced_capacities(n, m)` (l.346) : capacités déterministes
+    garantissant Σcap = n. Base = n//m, les n%m premiers parcours ont +1.
+    Par exemple n=13, m=10 : 3 parcours ont cap=2, 7 ont cap=1. Exactement
+    comme nos données réelles.
+
+On réutilise `build_rank_etu` et `build_rank_spe` pour précalculer les
+matrices de rang sur ces instances aléatoires."
+
+================================================================================
+  Q8–Q10 – PERFORMANCE : TEMPS ET ITÉRATIONS (lignes 375–456, 695–715)
+================================================================================
+
+DIRE :
+"La classe `PerformanceMeasurer` (l.375) mesure les deux algorithmes pour
+n ∈ {200, 400, ..., 2000}, avec m=10 et 10 tests par valeur de n.
+On utilise `time.perf_counter()` pour une précision sous-milliseconde.
+
+[MONTRER performance_times.png et performance_iters.png]
+
+OBSERVATIONS (Q9 — complexité observée) :
+  → Les deux courbes de temps sont linéaires en n.
+  → Cohérent avec la théorie :
+    · GS étudiant  : O(n×m×log(n/m)) ≈ O(n log n) ≈ O(n) pour m=10 fixé
+    · GS parcours  : O(n×m) = O(n) pour m=10 fixé
+
+  → Mais à n=2000 : GS parcours est ~2,6× plus lent (3,04 ms vs 1,15 ms)
+    malgré O(n) < O(n log n) théorique !
+
+EXPLICATION (Q10 — nombre d'itérations) :
+  → GS étudiant  : ~1,1n propositions (≈ 11% du pire cas n×m)
+  → GS parcours  : ~5,3n propositions (≈ 53% du pire cas n×m)
+
+  Le ratio de propositions (~5×) surpasse le gain par proposition (log factor).
+  GS côté parcours fait plus d'aller-retours car chaque parcours doit contacter
+  davantage d'étudiants pour remplir son quota (phénomène analogue au coupon
+  collector : il faut parcourir beaucoup de candidats pour en trouver un qui
+  accepte). La version étudiants est plus efficace car la max-heap évite les
+  propositions redondantes entre parcours et étudiants libres."
+
+================================================================================
+  Q11 – PLNE : MAXIMISER L'UTILITÉ MINIMALE (lignes 531–557, rapport Q11)
+================================================================================
+
+DIRE :
+"Pour les questions 11–15, on utilise Gurobi via la classe `PLNESolver`.
+
+Score de Borda de l'étudiant i affecté au parcours j :
+  b_ij = m-1 - rank_etu[i][j]  ∈ {0, ..., 9}  (1er choix → 9, dernier → 0)
+
+PLNE Q11 (méthode q11_maximize_min_utility, l.531) :
+  Variables : x[i,j] ∈ {0,1}, u_min ≥ 0
+  Maximiser : u_min
+  Sous contraintes :
+    (a) u_min ≤ Σ_j b_ij * x[i,j]   ∀i  → chaque étudiant atteint u_min
+    (b) Σ_j x[i,j] = 1              ∀i  → affectation unique
+    (c) Σ_i x[i,j] ≤ cap_j          ∀j  → capacités
+
+La contrainte (a) est le classique 'trick maximin' : linéariser le max d'un
+minimum en introduisant une variable u_min bornée par tous les termes.
+
+Résultat Gurobi : u_min* = 5 (contre 4 pour GS). L'équité est améliorée
+mais l'affectation n'est plus stable : 3 paires instables."
+
+================================================================================
+  Q12 – PLNE : MAXIMISER LA SOMME DES UTILITÉS (lignes 559–578)
+================================================================================
+
+DIRE :
+"On ajoute les utilités des parcours avec le score de Borda symétrique :
+  c_ji = n-1 - rank_spe[j][i]  ∈ {0, ..., 12}  (1er choix du parcours → 12)
+
+PLNE Q12 (méthode q12_maximize_sum_utility, l.559) :
+  Maximiser : Σ_{i,j} (b_ij + c_ji) * x[i,j]
+  Mêmes contraintes (b) et (c).
+
+Résultat Gurobi : utilité totale = 213, utilité moyenne étudiants = 7,77,
+mais utilité minimum étudiants = 4 (même que GS) et 7 paires instables.
+→ Maximiser le bien-être global ne protège pas les étudiants les moins favorisés."
+
+================================================================================
+  Q13 – PLNE AVEC CONTRAINTE DES k PREMIERS CHOIX (lignes 580–607)
+================================================================================
+
+DIRE :
+"PLNE Q13 (méthode q13_maximize_sum_with_k, l.580) :
+  Même objectif que Q12, avec une contrainte supplémentaire d'équité :
+    Σ_j b_ij * x[i,j] ≥ m - k   ∀i
+
+  Justification de la contrainte :
+  L'étudiant i est dans ses k premiers choix ⟺ rank_etu[i][j] ≤ k-1
+  ⟺ b_ij = m-1-rang ≥ m-1-(k-1) = m-k.
+  Donc 'score Borda ≥ m-k' équivaut exactement à 'dans les k premiers choix'.
+
+  La borne inférieure de u_min de Q11 implique en effet le même m-k avec k=m-5
+  pour notre résultat. Q13 généralise en permettant d'explorer différents k."
+
+================================================================================
+  Q14 – PLUS PETIT k POUR MARIAGE PARFAIT (lignes 749–775)
+================================================================================
+
+DIRE :
+"On résout Q13 pour k = 1, 2, 3, ... jusqu'à la première faisabilité.
+
+  k=1 : infaisable (tous dans leur 1er choix — impossible avec des capacités)
+  k=2 : infaisable
+  k=3 : infaisable
+  k=4 : infaisable
+  k=5 : FAISABLE → plus petit k = 5
+
+Affectation obtenue pour k=5 :
+  AI2D={Etu7, Etu12}, BIM={Etu4}, CCA={Etu9}, IMA={Etu10},
+  MIND={Etu2, Etu11}, QI={Etu1}, RES={Etu8}, SAR={Etu6},
+  SESI={Etu0}, STL={Etu3, Etu5}
+
+Utilité moyenne = 7,85, minimum = 5, paires instables = 5.
+→ Tous les étudiants ont au moins leur 5e choix."
+
+================================================================================
+  Q15 – COMPARAISON DES AFFECTATIONS (lignes 778–794, rapport Q15)
+================================================================================
+
+DIRE :
+"[MONTRER le tableau de comparaison — rapport section Q15]
+
+┌──────────────────────┬──────────┬──────────┬──────────────────┐
+│ Affectation          │ Util.moy │ Util.min │ Paires instables │
+├──────────────────────┼──────────┼──────────┼──────────────────┤
+│ GS côté étudiants   │   7,85   │    4     │       0 ✓        │
+│ GS côté parcours    │   7,85   │    4     │       0 ✓        │
+│ Q11 – maximin        │   8,23   │    5 ✓   │       3          │
+│ Q12 – max somme      │   7,77   │    4     │       7          │
+│ Q14 – k=5, max somme │   7,85   │    5 ✓   │       5          │
+└──────────────────────┴──────────┴──────────┴──────────────────┘
+
+Analyse :
+  - Les deux GS sont les SEULES affectations stables (0 paire instable).
+    Sur cette instance, elles coïncident (affectation stable unique).
+    Elles sont optimales parmi toutes les affectations stables.
+
+  - Q11 améliore l'équité (+25% sur l'utilité min : 4→5) au prix de la
+    stabilité. Meilleure utilité moyenne aussi (8,23 vs 7,85).
+
+  - Q12 maximise le bien-être global (étudiants + parcours) mais ne protège
+    pas l'équité : util. min = 4, 7 paires instables. Le moins bon compromis.
+
+  - Q14 (k=5) est le meilleur compromis équité-efficacité : même utilité
+    moyenne que GS, même util. min que Q11, avec une contrainte explicite
+    garantissant les 5 premiers choix pour tous.
+
+CONCLUSION : Si la stabilité est prioritaire, GS est le seul choix.
+Si l'équité prime, Q11 ou Q14 offrent de meilleures garanties."
+
+================================================================================
+  QUESTIONS FRÉQUENTES DU JURY
+================================================================================
+
+Q : "Pourquoi utiliser un max-heap pour la version étudiants mais pas parcours ?"
+R : "Côté étudiants : quand un parcours est plein, on doit comparer le nouveau
+    candidat avec le PIRE étudiant actuellement affecté au parcours. Le heap
+    donne ce pire étudiant en O(1) et le remplace en O(log cap). Côté parcours :
+    la décision appartient à l'étudiant — il compare deux parcours via rank_etu[i][j]
+    en O(1). Pas besoin de connaître le 'pire' de qui que ce soit."
+
+Q : "Pourquoi GS parcours fait plus d'itérations mais est plus lent malgré O(n) < O(n log n) ?"
+R : "La complexité asymptotique ignore les constantes multiplicatives. Le facteur
+    log(cap_max) dans la version étudiants est log(13/10)≈0, pratiquement 1.
+    En revanche, le ratio d'itérations (5,3n vs 1,1n) est ~5×. L'overhead pratique
+    du volume de propositions l'emporte sur le gain théorique par proposition."
+
+Q : "Votre complexité O(n×m×log cap) est-elle bien la bonne ?"
+R : "Oui. Au pire, chaque étudiant propose aux m parcours (n×m propositions totales).
+    Chaque proposition implique une opération de heap en O(log cap_j) avec
+    cap_j ≤ cap_max. D'où O(n×m×log(cap_max)). On ne peut pas faire mieux
+    en général car il faut maintenir le pire étudiant de chaque parcours."
+
+Q : "Que se passe-t-il si Σcap ≠ n ?"
+R : "Si Σcap > n : certains parcours auront moins d'étudiants que leur capacité,
+    ce qui est acceptable — GS reste correct et stable. Si Σcap < n : certains
+    étudiants ne pourront pas être affectés. GS côté étudiants les ignorera
+    (la condition `if next_proposal[i] >= self.m: continue` l.158). On vérifie
+    dans notre code que Σcap = n sur les données réelles (ligne 645 du main)."
+
+Q : "Les solutions PLNE sont-elles uniques ?"
+R : "Non, en général. Gurobi retourne une solution optimale parmi plusieurs
+    possibles. C'est pourquoi l'affectation de Q14 diffère de celle de GS
+    bien qu'elles aient la même utilité moyenne et le même minimum."
+
+Q : "La contrainte Σ_j b_ij * x_ij ≥ m-k est-elle bien équivalente à 'k premiers choix' ?"
+R : "Oui. L'étudiant i est affecté à un parcours j avec rank_etu[i][j] ∈ {0,...,9}.
+    'Premier choix' signifie rank=0, 'k-ième choix' signifie rank=k-1.
+    Borda : b_ij = m-1-rank = 9-rank. Donc rank ≤ k-1 ⟺ b_ij ≥ 9-(k-1) = m-k.
+    La contrainte Σ_j b_ij*x_ij ≥ m-k force x[i,j]=1 seulement pour j avec
+    b_ij ≥ m-k, i.e. rank ≤ k-1. C'est exact."
+
+Q : "Votre implémentation gère-t-elle le cas où un parcours n'a plus de candidats ?"
+R : "Oui. Côté étudiants (l.158) : si next_proposal[i] >= m, l'étudiant a épuisé
+    sa liste et est ignoré. Côté parcours (l.232) : la boucle interne s'arrête
+    quand next_proposal[j] >= n, et le parcours n'est pas réinséré dans active."
+
+Q : "Pourquoi précalculer worst_rank_in dans StabilityChecker ?"
+R : "Sans précalcul, pour chaque paire (i,j) testée, on ferait max(rank_spe[j][w]
+    for w in assignment[j]) en O(cap_j). Sur n×m paires, la complexité serait
+    O(n×m×cap_max). Avec le précalcul en O(n) au total, chaque test est O(1)
+    et la complexité globale est O(n×m)."
+
+================================================================================
+  STRUCTURE DU CODE – AIDE-MÉMOIRE LIGNES
+================================================================================
+
+PreferenceData          : lignes  21 –  107
+  read_student_prefs    : lignes  44 –   55
+  read_spe_prefs        : lignes  57 –   73
+  build_rank_matrices   : lignes  75 –   91
+
+GaleShapleyStudentSide  : lignes 113 –  184
+  __init__              : lignes 129 –  134
+  run()                 : lignes 137 –  184
+
+GaleShapleySpeSide      : lignes 191 –  254
+  __init__              : lignes 205 –  211
+  run()                 : lignes 213 –  254
+
+StabilityChecker        : lignes 261 –  313
+  find_unstable_pairs   : lignes 282 –  313
+
+RandomGenerator         : lignes 320 –  369
+
+PerformanceMeasurer     : lignes 375 –  456
+  measure()             : lignes 384 –  422
+  plot_times()          : lignes 424 –  439
+  plot_iterations()     : lignes 441 –  456
+
+PLNESolver              : lignes 463 –  607
+  _base_model()         : lignes 495 –  512
+  q11_maximize_min...   : lignes 531 –  557
+  q12_maximize_sum...   : lignes 559 –  578
+  q13_maximize_sum_k    : lignes 580 –  607
+
+main()                  : lignes 630 –  805
+  Q1  (lecture)         : lignes 637 –  646
+  Q3  (GS étudiant)     : lignes 650 –  657
+  Q4/5 (GS parcours)    : lignes 661 –  668
+  Q6  (stabilité)       : lignes 673 –  690
+  Q8-10 (performance)   : lignes 694 –  715
+  Q11-15 (PLNE)         : lignes 719 –  801
+
+================================================================================
