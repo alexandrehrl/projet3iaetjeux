@@ -1,0 +1,439 @@
+================================================================================
+  LU3IN025 — DOCUMENT DE COMPRÉHENSION
+  Affectation stable, Gale-Shapley et PLNE — TMEs 1 à 3
+================================================================================
+
+OBJECTIF DE CE DOCUMENT
+-----------------------
+Ce document n'est pas un script de soutenance ni un rapport. Il sert à
+COMPRENDRE pourquoi les questions sont posées dans cet ordre, ce que chaque
+algorithme fait conceptuellement, et quelles sont les subtilités à maîtriser.
+Il faut le lire AVANT de réviser le projet : une fois ces concepts assimilés,
+le code et le rapport deviennent évidents.
+
+
+================================================================================
+  PARTIE 1 — LE PROBLÈME : POURQUOI EN PARLE-T-ON ?
+================================================================================
+
+1.1  Le contexte concret
+------------------------
+Sorbonne propose 10 parcours de Master en informatique (AI2D, BIM, ..., STL).
+Chaque année, des étudiants font des vœux et chaque parcours classe les
+candidats selon leurs dossiers. Il faut affecter les étudiants aux parcours
+en respectant DEUX choses :
+  - chaque parcours a une CAPACITÉ d'accueil limitée (ex : QI prend 1 étudiant,
+    AI2D prend 2 étudiants)
+  - les deux côtés ont des PRÉFÉRENCES ordonnées sur l'autre côté.
+
+C'est un cas particulier du problème classique des "hôpitaux et internes"
+(Hospital-Residents Problem), version généralisée des "mariages stables"
+(Stable Marriage Problem) de Gale et Shapley (1962).
+
+Différence clé avec les mariages :
+  - Mariages stables : 1 homme ↔ 1 femme (capacité 1 partout).
+  - Hôpitaux/Parcours : 1 étudiant peut aller dans 1 parcours, mais 1 parcours
+    peut accueillir plusieurs étudiants (capacité ≥ 1).
+
+1.2  La notion de "STABILITÉ"
+-----------------------------
+Une affectation est STABLE s'il n'existe AUCUNE paire (étudiant i, parcours j)
+qui formerait un "couple instable", c'est-à-dire :
+  - i n'est pas affecté à j, ET
+  - i préfère j à son affectation actuelle, ET
+  - j préfère i à au moins un de ses étudiants actuels (ou j a une place libre).
+
+INTUITION : si une telle paire existe, i et j auraient tous deux intérêt à
+"déserter" l'affectation officielle pour s'arranger entre eux. C'est ce qu'on
+veut éviter — d'où le mot "stable".
+
+THÉORÈME (Gale-Shapley, 1962) : une affectation stable existe TOUJOURS
+(sous nos hypothèses), et l'algorithme GS la trouve en temps polynomial.
+
+
+================================================================================
+  PARTIE 2 — L'ALGORITHME DE GALE-SHAPLEY : VERSION ÉTUDIANTS
+================================================================================
+
+2.1  L'idée générale (version simplifiée mariages)
+--------------------------------------------------
+Tant qu'un étudiant est libre :
+  - il propose au parcours qu'il préfère parmi ceux à qui il n'a pas encore proposé
+  - le parcours dit OUI ou NON :
+      OUI  : l'étudiant rejoint le parcours (ou remplace un moins préféré)
+      NON  : l'étudiant essaiera son choix suivant
+
+Au final, plus aucun étudiant n'est libre = on s'arrête.
+
+2.2  L'extension aux capacités > 1
+----------------------------------
+Pour un parcours j de capacité c_j > 1 :
+  - tant que j a moins de c_j étudiants → il accepte tout candidat
+  - quand j est plein et qu'un nouveau candidat i arrive :
+      → j compare i avec son PIRE étudiant actuel w
+      → si j préfère i à w : i remplace w (et w redevient libre)
+      → sinon : j refuse i
+
+Le point délicat : il faut TOUJOURS pouvoir trouver le "pire étudiant de j"
+rapidement. C'est là qu'intervient la max-heap (Q2).
+
+2.3  Pourquoi les questions Q2 et Q3 sont SÉPARÉES ?
+-----------------------------------------------------
+Le sujet veut qu'on RÉFLÉCHISSE aux structures avant de coder. C'est la
+différence entre un programme qui marche et un programme qui marche
+EFFICACEMENT.
+
+Les 5 opérations critiques identifiées par Q2 :
+
+  Opération                                    Naïf          Optimisé
+  ─────────────────────────────────────────────────────────────────────
+  1. Trouver un étudiant libre                 O(n)          O(1) deque
+  2. Prochaine proposition de i                O(m)          O(1) tableau
+  3. Position de i dans la liste de j          O(n) recherche O(1) rank_spe
+  4. Pire étudiant affecté à j                 O(c_j) max    O(1) max-heap
+  5. Remplacer un étudiant dans j              O(c_j)        O(log c_j) heap
+
+Sans ces optimisations, on aurait une complexité bien plus mauvaise.
+AVEC : O(n × m × log(c_max)).
+
+2.4  La matrice rank_spe : LE truc à comprendre
+-----------------------------------------------
+CP[j] = liste = [étudiant_préféré, 2e_préféré, ..., dernier]
+        index : 0,                  1,           ...   n-1
+
+rank_spe[j][i] = "à quelle POSITION se trouve l'étudiant i dans CP[j] ?"
+
+C'est l'inverse de CP. Le précalcul prend O(n×m), et après on peut comparer
+deux étudiants pour un parcours j en O(1) avec un simple "<".
+
+Sans cette inversion, à chaque proposition on devrait parcourir CP[j] pour
+trouver i — coût O(n) par proposition, ce qui détruit la complexité.
+
+2.5  Pourquoi une MAX-HEAP (et pas une min-heap) ?
+--------------------------------------------------
+On veut le PIRE étudiant de j (celui que j classe le plus loin, donc celui
+au rang le plus ÉLEVÉ).
+
+Or Python n'a qu'une min-heap (heapq). Astuce : on stocke (-rang, étudiant).
+Le sommet du tas est alors le tuple avec le plus PETIT premier élément
+= le plus PETIT -rang = le plus GRAND rang = le PIRE étudiant.
+
+C'est un truc classique : "min-heap + négation = max-heap".
+
+
+================================================================================
+  PARTIE 3 — GALE-SHAPLEY VERSION CÔTÉ PARCOURS
+================================================================================
+
+3.1  Pourquoi étudier la version "côté parcours" ?
+--------------------------------------------------
+THÉORÈME : selon qui propose, on obtient une affectation stable DIFFÉRENTE.
+  - GS côté étudiants → affectation OPTIMALE pour les étudiants
+    (chaque étudiant obtient son MEILLEUR parcours possible parmi toutes les
+     affectations stables)
+  - GS côté parcours → affectation OPTIMALE pour les parcours
+
+Sur notre instance précise, les deux donnent la MÊME affectation (cas où la
+solution stable est UNIQUE), mais ce n'est pas le cas en général.
+
+3.2  Adaptation côté parcours
+-----------------------------
+Tant qu'un parcours j a de la place ET des candidats restants :
+  - j contacte le prochain étudiant i de sa liste CP[j]
+  - si i est libre : i rejoint j
+  - sinon i est dans j' :
+      → on compare j et j' du point de vue de i (rank_etu[i][j] vs rank_etu[i][j'])
+      → si i préfère j : i quitte j' pour j (et j' a une place libre, donc se réactive)
+      → sinon : j passe au candidat suivant
+
+3.3  Pourquoi PAS de heap ici ?
+--------------------------------
+Côté étudiants, c'est le PARCOURS qui devait choisir entre plusieurs candidats
+(d'où le besoin de connaître son pire). Côté parcours, c'est l'ÉTUDIANT qui
+choisit entre deux parcours — on a besoin de rank_etu[i][j], qui est en O(1)
+avec la matrice. Pas de tas nécessaire.
+
+→ Complexité plus simple : O(n × m), strictement.
+
+3.4  Pourquoi GS parcours fait PLUS d'itérations en pratique ?
+--------------------------------------------------------------
+Théoriquement O(n×m) < O(n×m × log(c_max)). Pourtant côté étudiants, on
+mesure ~1,1n propositions, vs 5,3n côté parcours. Pourquoi ?
+
+→ Côté étudiants : un étudiant n'a que m=10 essais possibles. Donc total
+  borné par n × 10 = 10n, et en pratique chacun trouve une place rapidement.
+
+→ Côté parcours : chaque parcours doit "remplir" sa capacité face aux refus
+  des étudiants. Comme la moitié des étudiants est déjà mieux placée ailleurs,
+  un parcours doit parcourir sa liste plus loin avant de trouver un OUI.
+  C'est un phénomène analogue au "coupon collector".
+
+  En pratique : ~5,3n propositions, ratio ~5×.
+
+CONSÉQUENCE : malgré une meilleure complexité asymptotique, GS parcours
+est ~2,6× plus lent à n=2000 dans nos mesures. Le facteur log(c_max) ≈ 3
+de la version étudiants ne compense pas ce ratio d'itérations.
+
+
+================================================================================
+  PARTIE 4 — VÉRIFICATION DE LA STABILITÉ (Q6)
+================================================================================
+
+4.1  Pourquoi vérifier ?
+------------------------
+Pour deux raisons :
+  1. CONFIANCE : on a codé GS, on prétend que c'est stable, mais un bug est
+     possible. Un vérificateur indépendant nous le dit.
+  2. UTILITÉ POUR LA PLNE : pour les Q11-Q15, on construit des affectations
+     qui ne sont PAS forcément stables. On veut savoir COMBIEN de paires
+     instables elles contiennent — d'où la fonction.
+
+4.2  Algorithme naïf vs optimisé
+--------------------------------
+NAÏF : pour chaque paire (i, j), on teste les 3 conditions de stabilité.
+       Pour la 3e (j préfère i à au moins un de ses étudiants), on calcule
+       max(rank_spe[j][w] for w in assignment[j]) à chaque test.
+       → Coût : O(n × m × c_max).
+
+OPTIMISÉ : on précalcule worst_rank_in[j] = pire rang dans assignment[j].
+           Coût total du précalcul : O(n) (chaque étudiant compté une fois).
+           → Coût : O(n × m).
+
+Différence : O(n × m × c_max) vs O(n × m). Pour grand n, énorme.
+
+
+================================================================================
+  PARTIE 5 — MESURES DE PERFORMANCES (Q7-Q10)
+================================================================================
+
+5.1  Pourquoi générer aléatoirement ?
+-------------------------------------
+On veut tester l'algorithme sur des instances de tailles VARIÉES (n=200 à 2000),
+ce qui est impossible avec la seule instance réelle (n=13).
+
+Q7 : on tire des permutations aléatoires uniformes. C'est le pire cas
+"moyen" : aucune corrélation entre préférences.
+
+5.2  Pourquoi 10 tests par valeur de n ?
+----------------------------------------
+La performance varie selon le tirage. On veut une moyenne stable, pas une
+mesure influencée par un cas extrême. Le sujet impose au moins 10.
+
+5.3  Pourquoi capacités équilibrées (Σ = n) ?
+---------------------------------------------
+Si Σcap < n : certains étudiants restent non-affectés, l'algorithme s'arrête
+              prématurément, les mesures sont biaisées.
+Si Σcap > n : certains parcours restent partiellement vides, ça change la
+              dynamique du remplissage.
+Σcap = n est le cas "naturel" où l'affectation est PARFAITE (mariage parfait).
+
+5.4  Comment lire les courbes ?
+-------------------------------
+TEMPS (performance_times.png) :
+  - les deux courbes sont quasi-droites → comportement linéaire en n
+  - la rouge (parcours) est au-dessus de la bleue (étudiants) → ~2,6× plus lent
+  - la pente est constante → pas de termes polynomiaux cachés en n²
+
+ITÉRATIONS (performance_iters.png) :
+  - même observation : linéaire en n
+  - ratio entre rouge et bleu : ~5× (cohérent avec l'analyse théorique)
+
+
+================================================================================
+  PARTIE 6 — PLNE : ÉQUITÉ ET OPTIMISATION (Q11-Q14)
+================================================================================
+
+6.1  Le score de Borda — POURQUOI ?
+-----------------------------------
+Pour optimiser, il faut quantifier "l'utilité" d'une affectation. Plusieurs
+choix possibles :
+  - utilité = rang (0 = meilleur)             → MINIMISER
+  - utilité = m - rang (m = meilleur)         → MAXIMISER (plus naturel)
+  - utilité = m - 1 - rang  ← SCORE DE BORDA   → MAXIMISER
+
+Borda donne :
+  - 1er choix → m-1 = 9
+  - 2e choix → m-2 = 8
+  - ...
+  - dernier choix → 0
+
+Avec ce score, "utilité élevée = étudiant content". Naturel pour un PLNE
+en MAXIMISATION.
+
+6.2  Variables et contraintes communes à Q11-Q14
+-------------------------------------------------
+VARIABLES :
+  x[i,j] ∈ {0,1}  : x[i,j] = 1 ⟺ l'étudiant i est affecté au parcours j
+
+CONTRAINTES STRUCTURELLES :
+  - Σ_j x[i,j] = 1   ∀i      (chaque étudiant a EXACTEMENT 1 parcours)
+  - Σ_i x[i,j] ≤ c_j ∀j      (capacité de chaque parcours respectée)
+
+Ces deux contraintes sont présentes dans CHAQUE PLNE des questions 11-14.
+
+6.3  Q11 : MAXIMIN — équité pure
+--------------------------------
+On veut MAXIMISER L'UTILITÉ MINIMALE des étudiants (l'étudiant le moins bien
+servi est le mieux servi possible).
+
+Astuce classique : "max-min" se linéarise en introduisant une variable
+auxiliaire U_min et la contrainte U_min ≤ utilité_de(i) pour tout i.
+
+Maximiser U_min :
+  U_min ≤ Σ_j b[i][j] · x[i,j]   ∀i
+
+On trouve U_min = 5 (vs 4 pour GS). Donc tous les étudiants ont AU MOINS
+leur 5e choix dans cette affectation. PRIX À PAYER : 3 paires instables.
+
+6.4  Q12 : MAX SOMME — efficacité globale
+-----------------------------------------
+Ici on inclut AUSSI les utilités des parcours :
+  c[j][i] = n - 1 - rank_spe[j][i]  (Borda du parcours j envers étudiant i)
+
+Maximiser : Σ_{i,j} (b[i][j] + c[j][i]) · x[i,j]
+
+Résultat : utilité totale 213, mais utilité MIN étudiant = 4 et 7 paires
+instables. → max-somme ne protège pas l'équité.
+
+6.5  Q13 : SOMME + ÉQUITÉ (k premiers choix)
+--------------------------------------------
+On veut le compromis : maximiser la somme MAIS forcer chaque étudiant dans
+ses k premiers choix.
+
+EQUIVALENCE CLÉ :
+  i est dans ses k premiers choix
+  ⟺ rank_etu[i][j] ≤ k - 1
+  ⟺ b[i][j] = m-1-rank ≥ m-1-(k-1) = m - k
+
+Donc la contrainte se traduit en :
+  Σ_j b[i][j] · x[i,j] ≥ m - k  ∀i
+
+(On exploite que UN seul x[i,j] vaut 1 pour i, donc la somme = b[i][j*]
+ où j* est le parcours affecté.)
+
+6.6  Q14 : trouver le plus petit k faisable
+-------------------------------------------
+On résout Q13 pour k = 1, 2, 3, ... et on cherche la PREMIÈRE valeur où
+Gurobi trouve une solution (faisable).
+
+Pourquoi commencer à k=1 et non k=0 ? k=0 voudrait dire que tout le monde
+a son 0-ième choix : aucun choix. Trivialement infaisable.
+
+Pourquoi croît-on k jusqu'à atteindre la faisabilité ? Plus k est petit,
+plus la contrainte est stricte. À k = m, la contrainte devient "≥ 0", donc
+toujours satisfaite (Borda ≥ 0 toujours).
+
+Sur notre instance : k = 5 est le plus petit. Cela veut dire qu'il est
+impossible que TOUS les étudiants obtiennent l'un de leurs 4 premiers choix
+(les capacités ne le permettent pas), mais c'est possible pour 5.
+
+
+================================================================================
+  PARTIE 7 — Q15 : COMPARAISON DES AFFECTATIONS
+================================================================================
+
+7.1  Tableau de synthèse — interprétation
+-----------------------------------------
+
+  Affectation             Util.moy  Util.min  Paires instables  Stabilité
+  ──────────────────────────────────────────────────────────────────────
+  GS étudiants            7,85      4         0                 ✓ STABLE
+  GS parcours             7,85      4         0                 ✓ STABLE
+  Q11 (maximin)           8,23      5         3                 ✗
+  Q12 (max somme)         7,77      4         7                 ✗
+  Q14 (k=5, max somme)    7,85      5         5                 ✗
+
+7.2  Lecture des résultats
+--------------------------
+GS sont les SEULES affectations stables. Sur cette instance, l'affectation
+stable étant unique, les deux versions de GS coïncident. Toute affectation
+"meilleure" (selon une métrique d'équité ou d'efficacité) sacrifie la
+stabilité.
+
+Q11 améliore l'équité ET la moyenne, mais introduit 3 paires instables.
+
+Q12 n'améliore RIEN du point de vue étudiant (même util.min que GS, util.moy
+plus faible) et a 7 paires instables. Inclure les parcours dans l'objectif
+n'apporte rien aux étudiants.
+
+Q14 (k=5) : le compromis le plus équilibré. Même utilité moyenne que GS,
+même utilité min que Q11, mais 5 paires instables.
+
+7.3  Quelle leçon en tirer ?
+----------------------------
+LE TRADE-OFF FONDAMENTAL :
+  Stabilité ↔ Équité ↔ Efficacité globale
+
+Aucune solution ne peut tout maximiser simultanément. Le choix dépend du
+critère privilégié :
+  - "Personne ne contestera" → GS (stabilité)
+  - "Le plus mal servi doit être le mieux servi possible" → Q11 (maximin)
+  - "Bien-être total maximal" → Q12 (max somme)
+  - "Compromis" → Q14 (équité minimale + max bien-être)
+
+
+================================================================================
+  PARTIE 8 — POINTS À NE PAS RATER POUR LA SOUTENANCE
+================================================================================
+
+8.1  Pièges classiques
+----------------------
+- Confondre rank_etu et rank_spe : rank_etu[i][j] = rang de j chez i,
+  rank_spe[j][i] = rang de i chez j.
+- Croire que GS donne TOUJOURS l'optimum équitable. Faux : il donne
+  l'optimum dans la classe des affectations STABLES.
+- Penser que "max-somme" = "équitable". Faux : c'est l'efficacité globale,
+  pas l'équité (qui est mesurée par util_min).
+- Oublier que Σ cap = n est nécessaire pour un mariage parfait.
+
+8.2  Liens conceptuels essentiels
+---------------------------------
+- Matrices INVERSES rank_etu / rank_spe → permettent les comparaisons en O(1).
+  Sans elles, les complexités annoncées sont fausses.
+- Max-heap ↔ min-heap par négation des clés → astuce Python.
+- Score de Borda b = m - 1 - rank → relie le rang (à minimiser) à une
+  utilité (à maximiser). Permet d'écrire des PLNE en MAX naturellement.
+- Contrainte "k premiers choix" = "Borda ≥ m - k". Manipulation indispensable
+  pour Q13.
+- Linéarisation du MAX-MIN : introduire variable U_min et contraintes
+  U_min ≤ utilité(i) pour tout i.
+
+8.3  Ordre logique des questions
+--------------------------------
+Q1     : lire les fichiers, structurer les données.
+Q2-Q3  : algorithme et structures côté étudiants.
+Q4-Q5  : variante côté parcours, observer la différence (ou non).
+Q6     : valider que GS produit bien des affectations stables.
+Q7-Q10 : tester à grande échelle, valider la complexité observée.
+Q11    : équité pure (PLNE maximin).
+Q12    : efficacité globale (PLNE max somme).
+Q13-14 : compromis entre les deux (somme avec contrainte d'équité).
+Q15    : faire le bilan et expliciter les trade-offs.
+
+L'ENCHAÎNEMENT PHILOSOPHIQUE :
+  "Comment trouver une affectation stable ?" (Q1-Q6)
+  → "À quelle vitesse ?"                      (Q7-Q10)
+  → "Stable, OK, mais est-ce équitable ?"     (Q11)
+  → "Et efficace ?"                            (Q12)
+  → "Peut-on combiner les deux ?"              (Q13-Q14)
+  → "Quel est le meilleur choix au final ?"   (Q15)
+
+
+================================================================================
+  ANNEXE — VOCABULAIRE
+================================================================================
+
+AFFECTATION : fonction qui à chaque étudiant associe au plus 1 parcours et
+              respecte les capacités.
+MARIAGE PARFAIT : affectation où tout étudiant est affecté (Σcap ≥ n).
+PAIRE INSTABLE : couple (i, j) qui aurait intérêt à dévier de l'affectation.
+PRÉFÉRENCE STRICTE : pas d'ex æquo (toutes les permutations sont totales).
+SCORE DE BORDA : utilité d'un agent pour son k-ième choix = m - k.
+PLNE : Programmation Linéaire en Nombres Entiers (variables ∈ {0, 1, 2, ...}).
+GUROBI : solveur commercial (académique gratuit) qui résout des PLNE.
+HEAP/TAS : structure d'arbre binaire avec min/max au sommet, ops en O(log n).
+DEQUE : "double-ended queue", file double-ended avec ops O(1) aux deux bouts.
+
+================================================================================
+  FIN DU DOCUMENT
+================================================================================

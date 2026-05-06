@@ -13,16 +13,14 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-
-# =============================================================================
 # Classe PreferenceData : lecture et stockage des données de préférences
-# =============================================================================
+
 
 class PreferenceData:
     """
-    Lit et stocke les préférences des étudiants et des parcours.
+    Lit et stocke les préférences des étudiants et des parcours
 
-    Attributs principaux :
+    attributs : 
       CE[i]     : liste des IDs de parcours ordonnée par préférence de l'étudiant i
       CP[j]     : liste des IDs d'étudiants ordonnée par préférence du parcours j
       capacities[j] : capacité d'accueil du parcours j
@@ -42,7 +40,7 @@ class PreferenceData:
         self.rank_spe = []
 
     def read_student_prefs(self, filename):
-        """Q1 : Lit PrefEtu.txt et construit la matrice CE."""
+        """Q1 : reads PrefEtu.txt et construit la matrice CE."""
         with open(filename, 'r', encoding='utf-8-sig') as f:
             lines = f.readlines()
         self.n = int(lines[0].strip())
@@ -55,13 +53,13 @@ class PreferenceData:
         return self.CE
 
     def read_spe_prefs(self, filename):
-        """Q1 : Lit PrefSpe.txt et construit la matrice CP et les capacités."""
+        """Q1 : reads PrefSpe.txt et construit la matrice CP et les capacités."""
         with open(filename, 'r', encoding='utf-8-sig') as f:
             lines = f.readlines()
-        # Ligne 0 : NbEtu <n>
+        # la 1ere ligne contient n, on vérifier et on skip
         n_check = int(lines[0].split()[1])
-        assert n_check == self.n, "Incohérence dans le nombre d'étudiants"
-        # Ligne 1 : Cap <c0> <c1> ...
+        assert n_check == self.n, "nombre d'étudiants de match pas"
+        # début lecture à partir de celle d'après
         self.capacities = [int(x) for x in lines[1].split()[1:]]
         self.m = len(self.capacities)
         self.CP = []
@@ -74,7 +72,7 @@ class PreferenceData:
 
     def build_rank_matrices(self):
         """
-        Construit les matrices inverses de classement pour des accès en O(1).
+        construit les matrices inverses de classement pour des accès en O(1).
         rank_etu[i][j] = position du parcours j dans la liste de l'étudiant i
         rank_spe[j][i] = position de l'étudiant i dans la liste du parcours j
         """
@@ -91,28 +89,26 @@ class PreferenceData:
         return self.rank_etu, self.rank_spe
 
     def display_assignment(self, assignment):
-        """Affiche une affectation de manière lisible."""
+        """display une affectation de manière lisible."""
         for j in range(self.m):
             students = sorted(assignment[j])
             names = [self.student_names[s] for s in students]
             print(f"  {self.spe_names[j]:6s} (cap {self.capacities[j]}): {names}")
 
     def assignment_to_current_spe(self, assignment):
-        """Construit le tableau current_spe[i] à partir d'une affectation."""
+        """construit le tableau current_spe[i] à partir d'une affectation."""
         current_spe = {}
         for j, students in assignment.items():
             for i in students:
-                current_spe[i] = j
-        return current_spe
+                current_spe[i]
 
 
-# =============================================================================
 # Classe GaleShapleyStudentSide : GS côté étudiants
-# =============================================================================
+
 
 class GaleShapleyStudentSide:
     """
-    Algorithme de Gale-Shapley côté étudiants pour le problème des hôpitaux.
+    algorithme de Gale-Shapley du cours côté étudiants pour le problème des hôpitaux
 
     Structures de données choisies pour l'efficacité (Q2) :
     1. free_students (deque)   : O(1) pour prendre/rendre libre un étudiant
@@ -141,13 +137,13 @@ class GaleShapleyStudentSide:
           assignment : dict {id_parcours: set d'id_étudiants}
           iterations : nombre total de propositions effectuées
         """
-        # 1. Tous les étudiants sont libres au départ
+        # 1. tous les étudiants sont libres au départ
         free_students = deque(range(self.n))
-        # 2. Indice de la prochaine proposition pour chaque étudiant
+        # 2. indice de la prochaine proposition pour chaque étudiant
         next_proposal = [0] * self.n
-        # 4. Affectation courante par parcours
+        # 4. affectation courante par parcours
         assignment = {j: set() for j in range(self.m)}
-        # 5. Max-heap par parcours : (-rang_spe[j][i], i) → sommet = pire étudiant
+        # 5. max-heap par parcours : (-rang_spe[j][i], i) → sommet = pire étudiant
         worst_heap = [[] for _ in range(self.m)]
 
         iterations = 0
@@ -184,9 +180,8 @@ class GaleShapleyStudentSide:
         return assignment, iterations
 
 
-# =============================================================================
 # Classe GaleShapleySpeSide : GS côté parcours
-# =============================================================================
+
 
 class GaleShapleySpeSide:
     """
@@ -254,9 +249,8 @@ class GaleShapleySpeSide:
         return assignment, iterations
 
 
-# =============================================================================
 # Classe StabilityChecker : vérification de la stabilité
-# =============================================================================
+
 
 class StabilityChecker:
     """
@@ -312,10 +306,8 @@ class StabilityChecker:
 
         return unstable
 
-
-# =============================================================================
 # Classe RandomGenerator : génération d'instances aléatoires (Q7)
-# =============================================================================
+
 
 class RandomGenerator:
     """Génère des instances aléatoires de préférences pour les tests de performance."""
@@ -367,10 +359,8 @@ class RandomGenerator:
                 rank[j][stu] = pos
         return rank
 
-
-# =============================================================================
 # Classe PerformanceMeasurer : mesure et tracé des performances (Q8-Q10)
-# =============================================================================
+
 
 class PerformanceMeasurer:
     """
@@ -455,10 +445,7 @@ class PerformanceMeasurer:
         plt.close()
         return filename
 
-
-# =============================================================================
 # Classe PLNESolver : résolution des PLNE avec Gurobi (Q11-Q14)
-# =============================================================================
 
 class PLNESolver:
     """
@@ -589,7 +576,7 @@ class PLNESolver:
         from gurobipy import GRB
         model, x, GRB = self._base_model(f"Q13_k{k}")
 
-        # Chaque étudiant doit être dans ses k premiers choix
+        # chaque étudiant doit être dans ses k premiers choix
         for i in range(self.n):
             model.addConstr(
                 gp.quicksum(self.bs_etu[i][j] * x[i, j] for j in range(self.m)) >= self.m - k
@@ -607,9 +594,7 @@ class PLNESolver:
         return None, None   # INFEASIBLE ou autre
 
 
-# =============================================================================
 # Fonctions utilitaires d'affichage
-# =============================================================================
 
 def print_section(title):
     print(f"\n{'=' * 60}")
@@ -623,17 +608,15 @@ def compute_stats(utils, label=""):
     print(f"  {label}Utilité moyenne étudiants : {avg:.2f} | minimale : {mn}")
 
 
-# =============================================================================
 # Fonction principale
-# =============================================================================
+
 
 def main():
     import os
     base_dir = os.path.dirname(os.path.abspath(__file__))
 
-    # ------------------------------------------------------------------
     # Q1 : Lecture des fichiers
-    # ------------------------------------------------------------------
+
     print_section("Q1 : Lecture des fichiers de préférences")
 
     data = PreferenceData()
@@ -645,9 +628,8 @@ def main():
     print(f"  Capacités : {dict(zip(data.spe_names, data.capacities))}")
     print(f"  Somme des capacités : {sum(data.capacities)}")
 
-    # ------------------------------------------------------------------
     # Q3 : GS côté étudiants
-    # ------------------------------------------------------------------
+
     print_section("Q3 : Gale-Shapley côté étudiants")
 
     gs_stu = GaleShapleyStudentSide(data.CE, data.CP, data.capacities, data.rank_spe)
@@ -656,9 +638,8 @@ def main():
     print(f"  Itérations (propositions) : {iters_stu}")
     data.display_assignment(assignment_stu)
 
-    # ------------------------------------------------------------------
     # Q4/Q5 : GS côté parcours
-    # ------------------------------------------------------------------
+
     print_section("Q4/Q5 : Gale-Shapley côté parcours")
 
     gs_spe = GaleShapleySpeSide(data.CE, data.CP, data.capacities, data.rank_etu)
@@ -667,9 +648,8 @@ def main():
     print(f"  Itérations (propositions) : {iters_spe}")
     data.display_assignment(assignment_spe)
 
-    # ------------------------------------------------------------------
     # Q6 : Vérification de la stabilité
-    # ------------------------------------------------------------------
+
     print_section("Q6 : Vérification de la stabilité")
 
     checker = StabilityChecker(
@@ -689,9 +669,8 @@ def main():
         for i, j in unstable_spe:
             print(f"    ({data.student_names[i]}, {data.spe_names[j]})")
 
-    # ------------------------------------------------------------------
     # Q7-Q10 : Performance
-    # ------------------------------------------------------------------
+
     print_section("Q7-Q10 : Génération aléatoire et mesure des performances")
 
     n_values = list(range(200, 2001, 200))
@@ -714,9 +693,8 @@ def main():
         it_s = results['iters_spe'][k]
         print(f"  {n:>5}  {t_e:>12.2f}  {t_s:>12.2f}  {it_e:>10.0f}  {it_s:>10.0f}")
 
-    # ------------------------------------------------------------------
     # Q11-Q15 : PLNE avec Gurobi
-    # ------------------------------------------------------------------
+
     print_section("Q11-Q15 : Programmation Linéaire en Nombres Entiers (Gurobi)")
 
     try:
